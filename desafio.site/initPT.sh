@@ -1,33 +1,34 @@
 #!/bin/bash
 export PATH=/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
-##########################################################################
-## INSTALL SCRIPT FOR DEVOPS CHALLENGE (DESAFIO.SITE)                   ##
-## AUTHOR:    T. FONTOURA                                               ##
-## GOAL: CONFIGURE LINUX UBUNTU WITH DOCKER CONTAINERS                  ##
-##       FOR WORDPRESS AND APACHE, USING NGINX AS REVERSE PROXY.        ##
-## ARQUIVO COM COMENTARIOS EM PORTUGUES: https//desafio.site/initPT.sh  ##
-##########################################################################
-# Check if it's root
+####################################################################
+## SCRIPT DE INSTALAÇAO DO DESAFIO DEVOPS                         ##
+## AUTOR:    T. FONTOURA                                          ##
+## OBJETIVO: CONFIGURAR SERVIDOR LINUX UBUNTU COM DOCKER,         ##
+##           CRIANDO CONTAINERS PARA WORDPRESS E APACHE,          ##
+##           E NGINX COMO PROXY REVERSO.                          ##
+## FILE WITH COMMENTS IN ENGLISH: https//desafio.site/init.sh     ##
+####################################################################
+# Verifica se eh root
 if [[ $EUID -ne 0 ]]; then
-   echo "WARNING: You don't have privileges to run this script. Use sudo." 
+   echo "ATENCAO: Este script deve ser rodado como root. Use sudo." 
    exit 1
 fi
 
 
-# Update instance. I commented out the upgrade for this quick install.
+#Atualiza nova instancia - comentei o upgrade para ser mais rapida a instalacao para a avaliacao. Em producao, deve ser atualizada.
 sudo apt update
 #sudo apt -y upgrade
 
-# Stop and disable apache if it is in the system. We need port 80 for NGINX.
+# Para e desabilita Apache para nao ocupar a porta 80, se estiver instalado.
 sudo systemctl disable apache2 && sudo systemctl stop apache2
 
 
 ##################################################
-#  CREATE VARIABLES  #
+# CRIAR AS VARIAVEIS #
 ######################
-# We could input or request input for server name, user and password here. As this is a quick demonstration, I hardcoded the information in the yml.
+# Se quisermos, podemos pedir input do usuario para senhas e users aqui. Para este desafio, eu hardcoded as senhas e outras informacoes no yml.
 
-# nginx.conf contents
+# Conteudo do arquivo nginx.conf
 __nginxconf="
 user www-data;
 worker_processes auto;
@@ -124,7 +125,7 @@ server {
 
 #echo "$__nginxconf"
 
-# docker-compose.yml contents
+# Conteudo do arquivo docker-compose.yml
 __dockercompose="
 version: '3'
 
@@ -209,29 +210,30 @@ volumes:
 
 #echo "$__dockercompose"
 
-#### END OF CREATING VARIAVEIS ###################
+#### FIM DE CRIAR AS VARIAVEIS ###################
 
-# The installation function
+# Abaixo, instalacao colocada dentro de uma funcao para prevenir problemas caso o curl pare no meio do download.
 instala(){
     echo
     echo ">>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<"
-    echo ">> Starting install. Please hold.   <<"
+    echo ">> Iniciando a instalacao. Aguarde. <<"
     echo ">>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<"
     echo
     
-    # INSTALL DOCKER
-    # We save time using a install script
+    # INSTALAR DOCKER
+    # Usando um script pronto para instalar docker, assim ganhamos tempo e podemos usar este script para outras distros no futuro.
     curl -fsSL https://get.docker.com | sudo bash
 
-    # INSTALL DOCKER-COMPOSE 
-    # If we want to be sure our yml is compatible with the docker compose version, we use a version we know. For this demonstration, let's use latest.
+    # INSTALAR DOCKER-COMPOSE 
+    # Se quisermos uma versao especifica, usamos a linha abaixo. Isso é interessante caso tenhamos duvida sobre a compatibilidade de novas versoes com nosso arquivo de configuracao.  Para este desafio, que é um teste, vou utilizar s outra linha que baixa a última versão disponivel do docker-compose.
     # sudo curl -L "https://github.com/docker/compose/releases/download/v2.3.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     
-    # Make it executable
+    # Tornar o arquivo executavel
      sudo chmod +x /usr/local/bin/docker-compose
      
-    # Here we create path and files. For this challenge I'm putting it all under home. Ideally we'd use EFS.
+    # Aqui vou criar os caminhos. Para este teste, vou colocar tudo na home do ubuntu, assim fica mais facil ser avaliado. Ideal seria usar EFS, mas nao daria para voces replicarem no servidor local. Por isso, façamos de conta que o direturio efs foi montado a partir de EFS. Se usassemos EFS, poderiamos manter nele o que quisessemos usar, como arquivos de configuracao ou versoes de software que queremos usar. Porem, como nao configurei um endpoint efs, vou criar "on the fly" os arquivos e diretorios que vou precisar nos seguintes caminhos:
+     
     # ~/efs/
     #     |_docker/
     #     |_conf/
@@ -243,34 +245,34 @@ instala(){
     mkdir /home/ubuntu/efs/www
     mkdir /home/ubuntu/efs/docker
 
-    # Change owner to www-data, so we don't have permissions issues for Apache.
+    # Mudar o owner para www-data, senao teremos problemas de permissoes.
     sudo chown 33:33 /home/ubuntu/efs/www
     
     # Cria arquivos
     echo "$__nginxconf"     > /home/ubuntu/efs/conf/nginx.conf
     echo "$__dockercompose" > /home/ubuntu/efs/docker/docker-compose.yml
 
-    echo "Installing..."
+    echo "Instalando..."
     echo
 
-       # Run docker-compose
+       # Roda docker-compose
        sudo docker-compose -f /home/ubuntu/efs/docker/docker-compose.yml up -d 
 
     echo
-    echo "Finished installing"
+    echo "Instalacao concluida"
     echo
-    echo "Verifying..."
+    echo "Verificando instalacao..."
     echo
     sleep 5
-    echo "Wait..."
+    echo "Aguarde..."
     echo
     sleep 10
 
     
-    # Get IP and finalize
+    # Pegar o IP e finalizar
        meuIP=$(curl -sS http://checkip.amazonaws.com)
 
-       # Check if webserver is working
+       #Verificar se está funcionando o webserver
        out=$(curl -k -I -L -s  "$meuIP" | grep -E -i 'http/[[:digit:]]*')
  
        if [ "$out" != "" ]
@@ -278,28 +280,27 @@ instala(){
               if [[ $out =~ .*200.* ]] 
            then
                echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
-               echo ">>         >>           S U C C E S S !          <<             <<"
-               echo ">>  You can now access the server using the following address   <<"
+               echo ">>         >>           S U C E S S O !          <<             <<"
+               echo ">>     Agora voce pode acessar este servidor pelo endereco      <<"
                echo ">>                  http://"$meuIP"                        <<" 
                echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
                echo
-               # At this point we could use AWS lambda to access Cloudflare API and add a DNS A register with this server IP and name. Something as http://new-server.desafio.site
+               # Avaliador: neste ponto eu poderia fazer uma lambda para acessar a API do Cloudflare e adicionar um registro A no DNS do dominio desafio.site para acessar este server pelo nome ao inves do IP. Algo como http://server-do-desafio.desafio.site
                echo
-               echo "And so we solved the challenge ;)"
+               echo "E assim concluímos o desafio ;)"
                echo "                  - T. Fontoura"
                echo
            else
-               echo "SOMETHING'S WRONG, SERVER NOT WORKING!"
-               echo "Headers for $meuIP:"
+               echo "ALGO DEU ERRADO, SERVIDOR NAO ESTA FUNCIONANDO!"
+               echo "Headers para $meuIP:"
                echo "$out"
            fi
        fi
 
 echo
-echo "Reminder: This server's external IP is "$meuIP
+echo "Lembrando: O IP externo do server é "$meuIP
 
 }
 
-# We run this install from inside a function, so we have some protection in case curl doesn't download the whole file. Here we are close to EOF
-
+# Como falei, estamos rodando a instalacao dentro de uma funcao para prevenir problemas caso o curl pare no meio do download. Aqui estamos no EOF.
 instala
